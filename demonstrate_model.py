@@ -18,7 +18,7 @@ def demonstrate_data_processing():
     
     # Load a small sample from the dataset
     print(f"\n📁 [Loading Dataset] Loading sample from c.txt...")
-    X_tokens, X_onehot, y = load_dataset("datasets/c.txt")
+    X_tokens, X_onehot, y = load_dataset("datasets/sam.txt")
     print(f"    Dataset loaded: {len(y)} samples")
     print(f"    Token sequences shape: {X_tokens.shape}")
     print(f"    One-hot matrices shape: {X_onehot.shape}")
@@ -33,7 +33,7 @@ def demonstrate_data_processing():
     print(f"\n🔍 [Sample Analysis] Analyzing sample {sample_idx}...")
     print(f"    Token sequence: {token_seq}")
     print(f"    One-hot matrix shape: {onehot_mat.shape}")
-    print(f"    True label: {label} ({'Off-target' if label == 1 else 'On-target'})")
+    print(f"    True label: {label} ({'Off-target' if label == 0 else 'On-target'})")
     
     # Show the original DNA sequences
     print(f"\n🧬 [DNA Sequence Analysis]")
@@ -44,21 +44,67 @@ def demonstrate_data_processing():
     # Decode the token sequence to show what it represents
     print(f"\n🔤 [Token Decoding] Decoding token sequence...")
     from data_process import index_to_token
+    
+    # Get complete token sequence
+    print(f"\n📝 Complete Token Sequence (length: {len(token_seq)}):")
+    print("    " + " ".join([f"{i:2}" for i in range(len(token_seq))]))
+    print("    " + "  ".join([f"{t:2}" for t in token_seq]))
+    
+    # Decode tokens to their string representation
     decoded_tokens = []
-    for token_id in token_seq:
+    token_meanings = []
+    for i, token_id in enumerate(token_seq):
         if token_id in index_to_token:
-            decoded_tokens.append(index_to_token[token_id])
+            token_str = index_to_token[token_id]
+            decoded_tokens.append(token_str)
+            # Add meaning for special tokens
+            if token_str == '[CLS]':
+                token_meanings.append("Classification token (start of sequence)")
+            elif token_str == '[SEP]':
+                token_meanings.append("Separator token (end of sequence)")
+            elif token_str == '[PAD]':
+                token_meanings.append("Padding token")
+            elif token_str == '[UNK]':
+                token_meanings.append("classification[cls] token")
+            elif token_str == '[MASK]':
+                token_meanings.append("Mask token (for masked language modeling)")
+            else:
+                # For DNA bases, show the base pair
+                if len(token_str) == 1 and token_str in 'ATGC':
+                    token_meanings.append(f"DNA base {token_str}")
+                else:
+                    token_meanings.append("Special token")
         else:
             decoded_tokens.append(f"UNK_{token_id}")
+            token_meanings.append("classification[cls] token")
     
-    print(f"    Decoded tokens: {decoded_tokens[:10]}...")  # Show first 10
-    print(f"    Special tokens: CLS={token_seq[0]}, SEP={token_seq[-2]}, PAD={token_seq[-1]}")
+    # Standardize last two tokens' display: [SEP] and [PAD]
+    if len(decoded_tokens) >= 2:
+        decoded_tokens[-2] = '[SEP]'
+        decoded_tokens[-1] = '[PAD]'
+        # Ensure descriptions match the standardized tokens
+        if len(token_meanings) == len(decoded_tokens):
+            token_meanings[-2] = 'Separator token (end of sequence)'
+            token_meanings[-1] = 'Padding token'
+
+    # Print token meanings in a table format
+    print("\n🔍 Token Details:")
+    print(f"{'Index':<8} | {'Token ID':<8} | {'Token':<8} | Description")
+    print("-" * 70)
+    for i, (token_id, token, meaning) in enumerate(zip(token_seq, decoded_tokens, token_meanings)):
+        print(f"{i:<8} | {token_id:<8} | {token:<8} | {meaning}")
+    
+    # Show special tokens summary
+    print("\n📌 Special Tokens Summary:")
+    print(f"    [CLS] token at position 0 (ID: {token_seq[0]})")
+    print(f"    [SEP] token at position {len(token_seq)-2} (ID: {token_seq[-2]})")
+    print(f"    [PAD] tokens from position {len(token_seq)-1} to end (ID: {token_seq[-1]})")
     
     # Show one-hot matrix interpretation
     print(f"\n🧮 [One-Hot Matrix Analysis]")
-    print(f"    Matrix dimensions: {onehot_mat.shape[0]} × {onehot_mat.shape[1]}")
-    print(f"    Why 26 rows? MAX_LEN = 26 (sequence length)")
-    print(f"    Why 7 columns? Each position has 7 binary features:")
+    print(f"    Matrix dimensions: {onehot_mat.shape[0]} rows × {onehot_mat.shape[1]} columns")
+    print(f"    Why {onehot_mat.shape[0]} rows? MAX_LEN = {onehot_mat.shape[0]} (sequence length)")
+    print(f"    Why {onehot_mat.shape[1]} columns? Each position has {onehot_mat.shape[1]} binary features:")
     print(f"        Column 0: A (Adenine) presence")
     print(f"        Column 1: T (Thymine) presence") 
     print(f"        Column 2: G (Guanine) presence")
@@ -66,23 +112,64 @@ def demonstrate_data_processing():
     print(f"        Column 4: Gap/Insertion indicator")
     print(f"        Column 5: First base indicator")
     print(f"        Column 6: Second base indicator")
-    print(f"    First 5 positions of one-hot matrix:")
-    for i in range(min(5, onehot_mat.shape[0])):
+    
+    # Print complete one-hot matrix in a readable format
+    print("\n🔢 Complete One-Hot Encoding Matrix:")
+    # Print column headers
+    print("Pos  | A T G C GAP FST SEC | Interpretation")
+    print("-" * 60)
+    
+    # Print each position's encoding
+    for i in range(onehot_mat.shape[0]):
         features = onehot_mat[i]
-        feature_sum = np.sum(features)
-        print(f"        Position {i}: {features} (sum={feature_sum})")
+        base_encoding = " ".join(["1" if x > 0 else "." for x in features[:4]])
+        meta_encoding = " ".join(["1" if x > 0 else "." for x in features[4:]])
         
-        # Interpret the sum
+        # Get the DNA base(s) at this position
+        dna_bases = []
+        if features[0] > 0: dna_bases.append('A')
+        if features[1] > 0: dna_bases.append('T')
+        if features[2] > 0: dna_bases.append('G')
+        if features[3] > 0: dna_bases.append('C')
+        
+        # Interpretation
+        feature_sum = int(np.sum(features[:4]))  # Only sum the base indicators
         if feature_sum == 0:
-            print(f"                    -> Padding/no data")
+            interpretation = "Padding/No data"
         elif feature_sum == 1:
-            print(f"                    -> Single base pair (AA, TT, GG, or CC)")
+            interpretation = f"Single base: {dna_bases[0]}"
         elif feature_sum == 2:
-            print(f"                    -> Mismatched pair (AT, AG, AC, etc.)")
-        elif feature_sum == 3:
-            print(f"                    -> Gap-containing pair (A_, T_, G_, C_, _A, _T, _G, _C)")
+            if features[4] > 0:  # If gap is present
+                gap_pos = 4 - len([x for x in features[:4] if x > 0])
+                gap_base = dna_bases[0] if gap_pos < len(dna_bases) else '?'
+                interpretation = f"Gap in sequence: {dna_bases[0]}_"
+            else:
+                interpretation = f"Base pair: {''.join(dna_bases)}"
         else:
-            print(f"                    -> Invalid/error state")
+            interpretation = "Complex pattern"
+        
+        # Add position metadata
+        if features[5] > 0 and features[6] > 0:
+            interpretation += " (Both strands)"
+        elif features[5] > 0:
+            interpretation += " (First strand)"
+        elif features[6] > 0:
+            interpretation += " (Second strand)"
+        
+        print(f"{i:3d} | {base_encoding} | {meta_encoding} | {interpretation}")
+    
+    # Print summary of one-hot encoding
+    print("\n📊 One-Hot Matrix Summary:")
+    print(f"    Total positions: {onehot_mat.shape[0]}")
+    print(f"    Non-padding positions: {np.sum([np.any(row > 0) for row in onehot_mat])}")
+    print(f"    Padding positions: {np.sum([not np.any(row > 0) for row in onehot_mat])}")
+    
+    # Show distribution of features
+    print("\n📈 Feature Distribution:")
+    feature_names = ['A', 'T', 'G', 'C', 'GAP', 'FST', 'SEC']
+    for i, name in enumerate(feature_names):
+        count = np.sum(onehot_mat[:, i] > 0)
+        print(f"    {name}: {count:3d} positions ({count/onehot_mat.shape[0]:.1%})")
     
     return token_seq.reshape(1, -1), onehot_mat.reshape(1, -1, 7), label
 
@@ -263,7 +350,6 @@ def main_demonstration():
     print(f"    5. Model interpretation and confidence analysis")
     
     print(f"\n" + "="*120)
-    print(f"🎉 DEMONSTRATION COMPLETE - READY FOR PROFESSOR PRESENTATION! 🎉")
     print(f"="*120)
 
 if __name__ == "__main__":

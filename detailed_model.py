@@ -174,6 +174,82 @@ def predict_single_example(model, token_input, onehot_input, label=None):
     print(f"\n🚀 [Prediction Process]")
     print(f"    Running forward pass through the model...")
     
+    # Full per-layer input/output tracing
+    print(f"\n🧭 [Full Layer-by-Layer Trace]")
+    try:
+        layer_inputs = []
+        layer_outputs = []
+        layer_names = []
+        for layer in model.layers:
+            try:
+                # Some layers have multiple inputs/outputs
+                inp_t = layer.input
+                out_t = layer.output
+                layer_inputs.append(inp_t)
+                layer_outputs.append(out_t)
+                layer_names.append(layer.name)
+            except Exception:
+                # Skip layers that do not expose tensors in functional graph
+                continue
+
+        # Build a single probe model that outputs all inputs and outputs of each layer
+        probe_model = Model(
+            inputs=model.inputs,
+            outputs=list(layer_inputs) + list(layer_outputs)
+        )
+
+        probe_values = probe_model.predict([token_input, onehot_input], verbose=0)
+
+        n = len(layer_names)
+        print(f"    Tracing {n} layers (inputs and outputs)...")
+
+        def normalize_array(x):
+            # Handle Keras returning lists/tuples for some layers
+            if isinstance(x, (list, tuple)) and len(x) > 0:
+                x = x[0]
+            return x
+
+        def full_preview(arr):
+            arr = normalize_array(arr)
+            try:
+                # If there is a batch dimension of 1, unwrap it for readability
+                if hasattr(arr, 'ndim') and arr.ndim >= 1 and arr.shape[0] == 1:
+                    arr_to_print = arr[0]
+                else:
+                    arr_to_print = arr
+
+                # Decide whether to print entire array or truncate
+                max_elems = 4096  # safety cap
+                total = np.prod(arr_to_print.shape) if hasattr(arr_to_print, 'shape') else 0
+                if total and total <= max_elems:
+                    return np.array2string(arr_to_print, precision=6, separator=", ")
+                else:
+                    flat = np.asarray(arr_to_print).ravel()
+                    head = min(flat.size, 256)
+                    return f"{np.array2string(flat[:head], precision=6, separator=', ')} ... (truncated {flat.size-head} of {flat.size})"
+            except Exception:
+                return str(arr)
+
+        for i, lname in enumerate(layer_names):
+            # Fetch input and output arrays for this layer
+            tin = probe_values[i]
+            tout = probe_values[n + i]
+
+            # Format shapes
+            tin_shape = getattr(normalize_array(tin), 'shape', None)
+            tout_shape = getattr(normalize_array(tout), 'shape', None)
+
+            print(f"\n    ➤ Layer [{i+1:02d}/{n}] {lname} ({model.get_layer(lname).__class__.__name__})")
+            print(f"       - Input shape:  {tin_shape}")
+            print(f"       - Output shape: {tout_shape}")
+            try:
+                print(f"       - Input sample:  {full_preview(tin)}")
+                print(f"       - Output sample: {full_preview(tout)}")
+            except Exception:
+                print(f"       - Samples: <unavailable>")
+    except Exception as e:
+        print(f"    Full layer-by-layer trace skipped due to error: {e}")
+
     # Get intermediate outputs for detailed analysis
     print(f"\n🔬 [CNN Branch Analysis]")
     try:
