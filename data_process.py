@@ -8,17 +8,22 @@ SEP_IDX = 1
 PAD_IDX = 0
 MAX_LEN = 26
 
-BASES = ['A','C','G','T']
-pair_tokens = [b1+b2 for b1 in BASES for b2 in BASES]
-indel_tokens = [b+'_' for b in BASES] + ['_'+b for b in BASES]
-token_to_index = {}
-index_to_token = {}
-idx = 2
-for p in pair_tokens:
-    token_to_index[p] = idx; index_to_token[idx] = p; idx += 1
-for it in indel_tokens:
-    token_to_index[it] = idx; index_to_token[idx] = it; idx += 1
-VOCAB_SIZE = idx
+# Use the exact token mapping provided by the user (no dynamic construction)
+token_dict = {
+    '[CLS]': 0,
+    '[SEP]': 1,
+    'AA': 2, 'AC': 3, 'AG': 4, 'AT': 5,
+    'CA': 6, 'CC': 7, 'CG': 8, 'CT': 9,
+    'GA': 10, 'GC': 11, 'GG': 12, 'GT': 13,
+    'TA': 14, 'TC': 15, 'TG': 16, 'TT': 17,
+    'A_': 18, '_A': 19, 'C_': 20, '_C': 21, 'G_': 22,
+    '_G': 23, 'T_': 24, '_T': 25, '--': 26
+}
+
+# Expose the same names expected by the rest of the pipeline
+token_to_index = token_dict
+index_to_token = {v: k for k, v in token_to_index.items()}
+VOCAB_SIZE = max(token_to_index.values()) + 1
 
 class DatasetEncoder:
     def __init__(self, max_len=MAX_LEN):
@@ -28,18 +33,18 @@ class DatasetEncoder:
             'TA':[1,1,0,0,0,0,1],'TT':[0,1,0,0,0,0,0],'TG':[0,1,1,0,0,1,0],'TC':[0,1,0,1,0,1,0],
             'GA':[1,0,1,0,0,0,1],'GT':[0,1,1,0,0,0,1],'GG':[0,0,1,0,0,0,0],'GC':[0,0,1,1,0,1,0],
             'CA':[1,0,0,1,0,0,1],'CT':[0,1,0,1,0,0,1],'CG':[0,0,1,1,0,0,1],'CC':[0,0,0,1,0,0,0],
-            'A_':[1,0,0,0,1,1,0],'T_':[0,1,0,0,1,1,0],'G_':[0,0,1,0,1,1,0],'C_':[0,0,0,1,1,1,0],
             '_A':[1,0,0,0,1,0,1],'_T':[0,1,0,0,1,0,1],'_G':[0,0,1,0,1,0,1],'_C':[0,0,0,1,1,0,1],
             '--':[0,0,0,0,0,0,0]
         }
 
     def encode_token_list(self, pair_list):
-        toks = [CLS_IDX]
+        """Encode using exact token_dict mapping: [CLS], tokens, [SEP], pad with '--'"""
+        toks = [token_to_index['[CLS]']]
         for p in pair_list[:self.max_len-2]:
-            toks.append(token_to_index.get(p, PAD_IDX))
-        toks.append(SEP_IDX)
+            toks.append(token_to_index.get(p, token_to_index['--']))
+        toks.append(token_to_index['[SEP]'])
         while len(toks) < self.max_len:
-            toks.append(PAD_IDX)
+            toks.append(token_to_index['--'])
         return np.array(toks, dtype=np.int32)
 
     def encode_onehot_matrix(self, pair_list):
@@ -63,7 +68,6 @@ def make_pair_list(seq1, seq2):
             token = a + b
         pair_list.append(token)
     return pair_list
-
 def load_txt_dataset(path):
     toks, mats, labels = [], [], []
     enc = DatasetEncoder()

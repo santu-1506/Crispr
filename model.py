@@ -32,14 +32,31 @@ class TransformerBlock(layers.Layer):
         return out2
 
 # ---------- Model parts ----------
-def inception_cnn_branch(inp, max_len=26):
-    convs = []
-    for k in [5,15,25,35]:
-        c = layers.Conv1D(filters=80, kernel_size=k, padding="same", activation="relu")(inp)
-        convs.append(c)
-    x = layers.Concatenate()(convs)
-    x = layers.Dense(80, activation="relu")(x)
-    return x
+def CNN_branch(inputs, max_len=26):
+    """
+    Inception-like CNN branch using Conv2D over the one-hot input (max_len x 7).
+    Steps:
+    - Expand channel dimension to make input 4D.
+    - Apply parallel Conv2D with kernel sizes (1,1), (2,2), (3,3), (5,5) and filter counts 5, 15, 25, 35.
+    - Concatenate along channels to get 80 feature maps.
+    - Collapse the width dimension (7) via max-reduction to produce (max_len, 80) for BiGRU input.
+    """
+    # inputs: (batch, max_len, 7)
+    x = layers.Lambda(lambda t: tf.expand_dims(t, axis=-1))(inputs)  # (batch, max_len, 7, 1)
+
+    conv1 = layers.Conv2D(5, (1, 1), padding='same', activation='relu')(x)
+    conv2 = layers.Conv2D(15, (2, 2), padding='same', activation='relu')(x)
+    conv3 = layers.Conv2D(25, (3, 3), padding='same', activation='relu')(x)
+    conv4 = layers.Conv2D(35, (5, 5), padding='same', activation='relu')(x)
+
+    merged = layers.Concatenate(axis=-1)([conv1, conv2, conv3, conv4])  # (batch, max_len, 7, 80)
+
+    # Collapse width dimension (the 7 features) to match desired shape (max_len, 80)
+    collapsed = layers.Lambda(lambda t: tf.reduce_max(t, axis=2))(merged)  # (batch, max_len, 80)
+
+    # Optional explicit reshape for clarity (no-op if shapes already align)
+    cnn_out = layers.Reshape((max_len, 80))(collapsed)
+    return cnn_out
 
 def bert_branch(inp, vocab_size, max_len, small_debug=False):
     embed_dim = 768 if not small_debug else 128
@@ -57,7 +74,7 @@ def build_crispr_bert_model(vocab_size, max_len, small_debug=False):
     inp_tok = layers.Input(shape=(max_len,), dtype=tf.int32)
     inp_hot = layers.Input(shape=(max_len,7), dtype=tf.float32)
 
-    x_cnn = inception_cnn_branch(inp_hot, max_len=max_len)
+    x_cnn = CNN_branch(inp_hot, max_len=max_len)
     x_bert = bert_branch(inp_tok, vocab_size, max_len, small_debug=small_debug)
 
     x_cnn = layers.Bidirectional(layers.GRU(40, return_sequences=False))(x_cnn)
@@ -72,3 +89,4 @@ def build_crispr_bert_model(vocab_size, max_len, small_debug=False):
     out = layers.Dense(2, activation="softmax")(x)
 
     return Model([inp_tok, inp_hot], out)
+
