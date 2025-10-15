@@ -90,8 +90,10 @@ function getCategoryExplanation(category) {
 
 // Helper function to call Python model API
 async function callPythonModel(sgRNA, DNA) {
+  const modelUrl = process.env.PYTHON_MODEL_URL || 'http://localhost:5001';
+  
   try {
-    const response = await axios.post('http://localhost:5001/predict', {
+    const response = await axios.post(`${modelUrl}/predict`, {
       sgRNA: sgRNA,
       DNA: DNA
     }, {
@@ -101,6 +103,9 @@ async function callPythonModel(sgRNA, DNA) {
     return response.data;
   } catch (error) {
     console.error('Error calling Python model:', error.message);
+    if (error.code === 'ECONNREFUSED') {
+      throw new Error(`Model prediction service unavailable. Please ensure the Python model API is running on ${modelUrl}`);
+    }
     throw new Error('Model prediction service unavailable');
   }
 }
@@ -217,7 +222,7 @@ router.post('/text', authenticateToken, [
     res.status(500).json({
       success: false,
       message: 'Failed to process prediction',
-      error: error.message
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }
 });
@@ -315,7 +320,7 @@ router.post('/image', authenticateToken, upload.single('image'), [
     res.status(500).json({
       success: false,
       message: 'Failed to process image prediction',
-      error: error.message
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }
 });
@@ -381,7 +386,8 @@ router.get('/recent', async (req, res) => {
     console.error('Error fetching recent predictions:', error);
     res.status(500).json({
       success: false,
-      message: 'Failed to fetch recent predictions'
+      message: 'Failed to fetch recent predictions',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }
 });
@@ -407,7 +413,8 @@ router.get('/:id', async (req, res) => {
     console.error('Error fetching prediction:', error);
     res.status(500).json({
       success: false,
-      message: 'Failed to fetch prediction'
+      message: 'Failed to fetch prediction',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }
 });

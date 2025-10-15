@@ -72,7 +72,8 @@ router.get('/summary', async (req, res) => {
     console.error('Analytics error:', error);
     res.status(500).json({
       success: false,
-      message: 'Failed to fetch analytics data'
+      message: 'Failed to fetch analytics data',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }
 });
@@ -124,7 +125,8 @@ router.get('/performance', async (req, res) => {
     console.error('Performance metrics error:', error);
     res.status(500).json({
       success: false,
-      message: 'Failed to fetch performance metrics'
+      message: 'Failed to fetch performance metrics',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }
 });
@@ -181,7 +183,8 @@ router.get('/categories', async (req, res) => {
     console.error('Category breakdown error:', error);
     res.status(500).json({
       success: false,
-      message: 'Failed to fetch category breakdown'
+      message: 'Failed to fetch category breakdown',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }
 });
@@ -251,7 +254,8 @@ router.get('/trends', async (req, res) => {
     console.error('Trends error:', error);
     res.status(500).json({
       success: false,
-      message: 'Failed to fetch trend data'
+      message: 'Failed to fetch trend data',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }
 });

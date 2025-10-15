@@ -9,8 +9,20 @@ router.get('/samples', async (req, res) => {
   try {
     const limit = parseInt(req.query.limit) || 10;
     
-    // Read the I2.txt file to get sample sequences
-    const filePath = path.join(__dirname, '..', 'I2.txt');
+    // Read the I2.csv file to get sample sequences
+    const filePath = path.join(__dirname, '..', 'I2.csv');
+    
+    // Check if file exists
+    try {
+      await fs.access(filePath);
+    } catch (err) {
+      console.error('I2.csv file not found:', filePath);
+      return res.status(404).json({
+        success: false,
+        message: 'Sample sequences file not found. Please ensure I2.csv exists in the project root.'
+      });
+    }
+    
     const fileContent = await fs.readFile(filePath, 'utf8');
     
     const lines = fileContent.trim().split('\n');
@@ -40,7 +52,8 @@ router.get('/samples', async (req, res) => {
     console.error('Error reading sequences:', error);
     res.status(500).json({
       success: false,
-      message: 'Failed to fetch sample sequences'
+      message: 'Failed to fetch sample sequences',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }
 });
@@ -111,7 +124,8 @@ router.post('/validate', async (req, res) => {
     console.error('Validation error:', error);
     res.status(500).json({
       success: false,
-      message: 'Failed to validate sequences'
+      message: 'Failed to validate sequences',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }
 });
@@ -152,7 +166,8 @@ router.get('/random', async (req, res) => {
     console.error('Random sequence generation error:', error);
     res.status(500).json({
       success: false,
-      message: 'Failed to generate random sequences'
+      message: 'Failed to generate random sequences',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }
 });
